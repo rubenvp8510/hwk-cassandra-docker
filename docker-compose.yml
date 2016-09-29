@@ -1,0 +1,31 @@
+hawkular:
+  image: "pilhuhn/hawkular-services:latest"
+  ports:
+    - "8080:8080"
+    - "8443:8443"
+    - "9990:9990"
+  volumes:
+    - /tmp/opt/hawkular/data:/opt/data
+  links:
+    - cassandra_seed:hw_cassandra
+  environment:
+    - HAWKULAR_BACKEND=remote
+    - CASSANDRA_NODES=hw_cassandra
+
+cassandra_seed:
+  image: cassandra:3.7
+  ports:
+    - "7000:7000"
+  environment:
+    - CASSANDRA_START_RPC=true
+  volumes:
+    - /tmp/opt/hawkular/cassandra:/var/lib/cassandra
+
+cassandra_node:
+  image: cassandra:3.7
+  environment:
+    - CASSANDRA_START_RPC=true
+  links:
+    - cassandra_seed:cassandra
+  volumes:
+   - /var/lib/cassandra

@@ -1,0 +1,23 @@
+#/bin/bash
+help_text="Usage: ./cassandra_public -b <broadcast_address>"
+if [ "$#" -ne 2 ]; then
+	echo $help_text
+	exit
+fi
+
+while [[ $# -gt 1 ]]
+do
+i="$1"
+case $i in
+	-b| --broadcast)
+	BROADCAST_ADDRESS="$2"
+	shift
+	;;
+	*)
+	;;
+esac
+shift
+done
+
+echo "Launching Hawkular with Cassandra seed with broadcast address: ${BROADCAST_ADDRESS}"
+BROADCAST_ADDRESS=$BROADCAST_ADDRESS docker-compose -f docker-public.yml up

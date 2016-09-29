@@ -1,0 +1,3 @@
+#!/bin/bash
+
+docker exec -it dockercluster_cassandra_seed_1 nodetool status

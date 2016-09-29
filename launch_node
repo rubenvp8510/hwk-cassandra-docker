@@ -1,0 +1,35 @@
+#/bin/bash
+help_text="Usage: ./launch_node -s <seed_address> -b <broadcast_address>"
+if [ "$#" -ne 4 ]; then
+	echo $help_text
+	exit
+fi
+
+while [[ $# -gt 1 ]]
+do
+i="$1"
+case $i in
+	-s| --seed)
+	CASSANDRA_SEEDS="$2"
+	shift
+	;;
+	-b| --broadcast)
+	BROADCAST_ADDRESS="$2"
+	shift
+	;;
+	*)
+	;;
+esac
+shift
+done
+
+echo "Launching cassandra node with:"
+echo "Broadcast address: ${BROADCAST_ADDRESS}"
+echo "Seeds:${CASSANDRA_SEEDS}"
+
+
+docker run --name cassandra_node  -d \
+			-e CASSANDRA_START_RPC=true \
+	    -e CASSANDRA_SEEDS="${CASSANDRA_SEEDS}" \
+	    -e CASSANDRA_BROADCAST_ADDRESS="${BROADCAST_ADDRESS}" \
+	    -p 7000:7000 -p 9160:9160 cassandra:3.7

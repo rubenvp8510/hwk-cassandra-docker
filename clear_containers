@@ -1,0 +1,11 @@
+#!/bin/bash
+
+docker_images=$(docker ps -a -q)
+
+if [ -n "${docker_images}" ]; then
+	docker stop $(docker ps -a -q) > /dev/null
+	echo "Deleting containers.."
+	docker rm $(docker ps -a -q)
+else
+   echo "There is no docker imagenes for clear"
+fi
