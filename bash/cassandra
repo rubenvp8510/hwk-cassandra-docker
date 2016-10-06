@@ -1,0 +1,113 @@
+#/bin/bash
+source config
+#NODE_TOOL_PATH='/opt/apache-cassandra/bin/nodetool'
+
+HW_CONTAINER_NAME=chawkular_node
+NODE_TOOL_PATH='/usr/bin/nodetool'
+
+function print_help {
+  echo "Use:"
+  echo "  hawkular -l                    - Launch seed node + hawkular-services"
+  echo "  hawkular -a <user> <dest_host> - Launch new cassandra node on <dest_host>"
+  echo "  hawkular -d <user> <dest_host> - Stop cassandra node on <dest_host>"
+  echo "  hawkular -r <user> <dest_host> - Delete cassandra node on <dest_host>"
+
+}
+function print_hawkular_log {
+  docker logs $HW_CONTAINER_NAME
+}
+
+function print_status {
+  docker exec -it cassandra_seed $NODE_TOOL_PATH status
+}
+
+function stop_remote_node {
+  if [[ $# -ne 2 ]]; then
+    print_help
+    exit
+  fi
+  ssh -t ${1}@${2} 'sudo docker stop cassandra_node'
+}
+
+function delete_remote_node {
+  if [[ $# -ne 2 ]]; then
+    print_help
+    exit
+  fi
+  # TODO: DECOMISSION NODE...
+  ssh -t ${1}@${2} 'sudo bash -c " docker stop cassandra_node; docker rm cassandra_node "'
+}
+
+function launch_hw {
+  docker run --name $HW_CONTAINER_NAME  -d \
+            -e HAWKULAR_BACKEND=remote \
+            -e CASSANDRA_NODES=cassandra_seed \
+            -p 8080:8080 -p 8443:8443 -p 9990:9990 \
+            --link cassandra_seed:cassandra_seed $HAWKULAR_IMAGE:$HAWKULAR_TAG
+}
+
+function launch_remote_node {
+  if [[ $# -ne 3 ]]; then
+    print_help
+    exit
+  fi
+  # This is for the brew Docker image....
+  
+  #allow_host='"{\"insecure-registries\":[\"brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888\"] }"'
+  #allow_host_command="echo ${allow_host} >> /etc/docker/daemon.json"
+  launch_command="docker run --name cassandra_node  -d \
+  -e CASSANDRA_START_RPC=true \
+  -e CASSANDRA_SEEDS="${1}" \
+  -e CASSANDRA_BROADCAST_ADDRESS="${3}" \
+  -p 7000:7000 -p 9160:9160 $CASSANDRA_IMAGE:$CASSANDRA_TAG"
+  ssh_command="sudo bash -c \" ${launch_command}\""
+  ssh -t ${2}@${3} ${ssh_command}
+}
+
+function launch_seed {
+  BROADCAST_ADDRESS=$PUBLIC_IP
+  echo "Launching Hawkular with Cassandra seed with broadcast address: ${BROADCAST_ADDRESS}"
+  docker run  --name cassandra_seed -d \
+  -p 7000:7000 \
+  -e CASSANDRA_START_RPC=true \
+  -e CASSANDRA_BROADCAST_ADDRESS=$BROADCAST_ADDRESS \
+  $CASSANDRA_IMAGE:$CASSANDRA_TAG
+}
+
+while [[ $# -gt 0 ]]
+do
+  i="$1"
+  case $i in
+    -s| --status)
+    print_status
+    exit
+    ;;
+    -l| --launch)
+    launch_seed
+    launch_hw
+    exit
+    ;;
+    -d| --down)
+    stop_remote_node $2 $3
+    exit
+    ;;
+    -r| --rm)
+    delete_remote_node $2 $3
+    exit
+    ;;
+    -a| --add)
+    launch_remote_node $PUBLIC_IP $2 $3
+    exit
+    ;;
+    -h| -hw)
+    print_hawkular_log
+    exit
+    ;;
+    *)
+      print_help
+      exit
+    ;;
+  esac
+  shift
+done
+print_help

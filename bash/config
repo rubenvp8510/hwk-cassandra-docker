@@ -1,0 +1,12 @@
+#!/bin/bash
+#CASSANDRA_IMAGE="brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/jboss/cassandra"
+#CASSANDRA_TAG="latest"
+
+
+CASSANDRA_IMAGE="cassandra"
+CASSANDRA_TAG="3.7"
+
+HAWKULAR_IMAGE='pilhuhn/hawkular-services'
+HAWKULAR_TAG='latest'
+
+PUBLIC_IP=10.0.1.95
