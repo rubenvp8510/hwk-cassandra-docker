@@ -1,0 +1,206 @@
+#/bin/bash
+source config
+#AWK_PROGRAM='/^--/ { for (i=1; i<=NF; i++) { if ($i == "--") cname="Status"; else cname=$i; ix[cname] = i } } /^(D|U)(N|L|J|M)/{ print $ix[c] }'
+# docker exec -it 25beb4ae472e $NODE_TOOL_PATH status | awk $AWK_PROGRAM -c $1
+
+function print_help {
+  echo "Usage: $0 COMMAND [arg..]"
+  echo
+  echo "  Commands:"
+  echo "     status   Display cluster status"
+  echo "     start    Start a new cassandra node and hawkular-service"
+  echo "     killall  Delete all cassandra nodes and hawkular-service container"
+  echo "     scale    Increase or decrease cassandra nodes in the cluser"
+  echo "     help     Print this help message"
+  echo
+}
+
+NODE_TOOL_PATH='/usr/bin/nodetool'
+
+function clean_up_node {
+  docker exec -it $1 $NODE_TOOL_PATH cleanup
+}
+
+function decomission_node {
+  docker exec -it $1 $NODE_TOOL_PATH decommission
+
+}
+
+function wait_cluster_up {
+  n_tries=120
+  docker_nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
+  n_nodes=${#docker_nodes[@]}
+  while [[ $n_tries -gt 0 ]]
+  do
+    n_tries=$[$n_tries-1]
+    info_str=$(docker exec -it $(get_first_node) $NODE_TOOL_PATH status | awk '/^(D|U)(N|L|J|M)/{ print $1 }')
+    if [[ -z $info_str ]]; then
+      sleep 1
+      continue
+    fi
+    info=($info_str)
+    count=0
+    for i in ${info[@]}; do
+      if [ "$i" == "UN" ]; then
+        count=$[$count+1]
+      fi
+    done
+    if [[ $count -eq $n_nodes ]]; then
+      break;
+    fi
+    sleep 1
+  done
+}
+
+function get_first_node {
+
+  nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
+  echo $nodes
+}
+
+function get_last_node {
+  nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
+  echo ${nodes[-1]}
+}
+
+
+function get_cluster_info {
+  first_node=$(get_first_node)
+  if [[ ! -z $first_node ]]; then
+    docker exec -it $(get_first_node) $NODE_TOOL_PATH status
+  fi
+}
+
+function get_nodes_number {
+  nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
+  echo ${#nodes[@]}
+}
+
+function stop_node {
+  docker stop $1
+}
+
+function delete_node {
+  docker rm $1
+}
+
+function remove_nodes {
+  n_nodes=$1
+  docker_nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
+
+  for i in $(seq 1 $n_nodes); do
+    container_id=${docker_nodes[$i]}
+    echo "Decomission node with container id $container_id"
+    decomission_node $container_id
+    echo "Stop and delete container $container_id."
+    stop_node $container_id
+    delete_node $container_id
+  done
+}
+
+function add_nodes {
+  n_nodes=$1
+  launched_nodes=()
+  for i in $(seq 1 $n_nodes); do
+    node_id=$(launch_node)
+    launched_nodes+=($node_id)
+    wait_cluster_up
+    echo "Added node with container ID: $node_id."
+  done
+  docker_nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
+
+
+  for i in ${docker_nodes[@]}; do
+    clean_up_node $i
+  done
+
+}
+
+function adjust_cluster {
+  # Parameters
+  # ${1} - New number of nodes...
+  #
+  n_nodes=$(get_nodes_number)
+  desired_nodes=$1
+  if [[ "$n_nodes" -gt  "$desired_nodes" ]]; then
+    diference=$(($n_nodes-$desired_nodes))
+    echo "Removing $diference nodes."
+    remove_nodes $diference
+  else
+    diference=$(($desired_nodes-$n_nodes))
+    echo "Adding $diference nodes."
+    add_nodes $diference
+  fi
+}
+
+function launch_node {
+  # Parameters
+  # ${1} - Cassandra Seed host/name, if you don't specify seed, a seed node will
+  #        be launched
+  node=$(get_first_node)
+
+  if [[ ! -z $node ]]; then
+    docker run -d \
+    -e CASSANDRA_START_RPC=true \
+    -e CASSANDRA_SEEDS=cassandra_seed \
+    --link $node:cassandra_seed \
+    $CASSANDRA_IMAGE:$CASSANDRA_TAG
+  else
+    docker run -d \
+    -e CASSANDRA_START_RPC=true \
+    $CASSANDRA_IMAGE:$CASSANDRA_TAG
+  fi
+}
+
+function launch_hawkular {
+  docker run --name $HW_CONTAINER_NAME  -d \
+  -e HAWKULAR_BACKEND=remote \
+  -e CASSANDRA_NODES=cassandra_seed \
+  -p 8080:8080 -p 8443:8443 -p 9990:9990 \
+  --link $(get_first_node):cassandra_seed $HAWKULAR_IMAGE:$HAWKULAR_TAG
+}
+
+function delete_cassandra_all {
+  docker_images=$(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }")
+  if [ -n "${docker_images}" ]; then
+    docker stop $(docker ps -a -q) > /dev/null
+    echo "Deleting containers.."
+    docker rm $(docker ps -a -q)
+  else
+    echo "There is no docker imagenes for clear"
+  fi
+}
+
+while [[ $# -gt 0 ]]
+do
+  i="$1"
+  case $i in
+    status)
+      info=$(get_cluster_info)
+      if [[ ! -z $info ]]; then
+        echo $info
+      else
+        echo "No online nodes are available, there is no cluster info."
+      fi
+    exit
+    ;;
+    start)
+      echo "Not implemented yet."
+    exit
+    ;;
+    scale)
+      adjust_cluster $1
+    exit
+    ;;
+    killall)
+      delete_cassandra_all
+    exit
+    ;;
+    *)
+    print_help
+    exit
+    ;;
+  esac
+  shift
+done
+print_help
