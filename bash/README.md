@@ -1,10 +1,10 @@
-# Use
+```
+Usage: ./orchestator COMMAND [arg..]
 
-- hawkular -l: Launch seed node + hawkular-services on local
-- hawkular -a user dest_host: Launch new cassandra node on <dest_host>
-- hawkular -d user dest_host: Stop cassandra node on <dest_host>
-- hawkular -r user dest_host:Delete cassandra node on <dest_host>
-
-# TODO
-  - When a node is removed this doesn't do the decomission process, so you can lost data.
-  - The process ask the password twice (for ssh and sudo..) we need to improve this.
+  Commands:
+     status   Display cluster status
+     start    Start a new cassandra node and hawkular-service
+     killall  Delete all cassandra nodes and hawkular-service container
+     scale    Increase or decrease cassandra nodes in the cluser
+     help     Print this help message
+```
