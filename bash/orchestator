@@ -171,6 +171,15 @@ function delete_cassandra_all {
   fi
 }
 
+function launch_hawkular {
+  docker run --name $HW_CONTAINER_NAME  -d \
+            -e HAWKULAR_BACKEND=remote \
+            -e CASSANDRA_NODES=cassandra_seed \
+            -p 8080:8080 -p 8443:8443 -p 9990:9990 \
+            --link cassandra_seed:cassandra_seed $HAWKULAR_IMAGE:$HAWKULAR_TAG
+}
+
+
 while [[ $# -gt 0 ]]
 do
   i="$1"
