@@ -53,7 +53,6 @@ function wait_cluster_up {
 }
 
 function get_first_node {
-
   nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
   echo $nodes
 }
@@ -77,18 +76,18 @@ function get_nodes_number {
 }
 
 function stop_node {
-  docker stop $1
+  docker stop $1 > /dev/null
 }
 
 function delete_node {
-  docker rm $1
+  docker rm $1 > /dev/null
 }
 
 function remove_nodes {
   n_nodes=$1
   docker_nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
-
-  for i in $(seq 1 $n_nodes); do
+  end_for=$[$n_nodes-1]
+  for i in $(seq 0 $end_for); do
     container_id=${docker_nodes[$i]}
     echo "Decomission node with container id $container_id"
     decomission_node $container_id
@@ -104,8 +103,9 @@ function add_nodes {
   for i in $(seq 1 $n_nodes); do
     node_id=$(launch_node)
     launched_nodes+=($node_id)
+    echo "Waiting for join to the cluster..."
     wait_cluster_up
-    echo "Added node with container ID: $node_id."
+    echo "Node with container ID: $node_id has joined to the cluster."
   done
   docker_nodes=($(docker ps  | awk "\$2==\"${CASSANDRA_IMAGE}:${CASSANDRA_TAG}\" { print \$1 }"))
 
@@ -176,11 +176,11 @@ do
   i="$1"
   case $i in
     status)
-      info=$(get_cluster_info)
-      if [[ ! -z $info ]]; then
-        echo $info
+      first_node=$(get_first_node)
+      if [[ ! -z $first_node ]]; then
+        docker exec -it $(get_first_node) $NODE_TOOL_PATH status
       else
-        echo "No online nodes are available, there is no cluster info."
+        echo "There is no nodes in this cluster."
       fi
     exit
     ;;
@@ -189,6 +189,7 @@ do
     exit
     ;;
     scale)
+      shift
       adjust_cluster $1
     exit
     ;;
